@@ -1,0 +1,17 @@
+Power-law slopes of median rollout_t1 (log-log least squares)
+
+vs. training trajectories, per width:
+  width    4: slope +0.03
+  width    8: slope +0.03
+  width   16: slope -0.03
+  width   32: slope -0.05
+  width   64: slope -0.04
+  width  128: slope -0.02
+vs. width, per number of trajectories:
+    1 traj: slope -0.93
+    2 traj: slope -1.06
+    4 traj: slope -1.14
+    8 traj: slope -1.11
+   16 traj: slope -1.11
+   32 traj: slope -1.07
+   64 traj: slope -1.06
