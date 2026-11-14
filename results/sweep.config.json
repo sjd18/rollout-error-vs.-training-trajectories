@@ -1,0 +1,38 @@
+{
+  "n_trajs": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    32,
+    64
+  ],
+  "widths": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128
+  ],
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "depth": 2,
+  "steps": 2000,
+  "batch_size": 64,
+  "lr": 0.003,
+  "n_pool": 64,
+  "n_test_starts": 16,
+  "horizons": [
+    0.5,
+    1.0,
+    2.5
+  ],
+  "data_key": 0,
+  "test_key": 1000,
+  "force_test_key": 100
+}

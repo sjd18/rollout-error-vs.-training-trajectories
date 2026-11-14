@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+.ipynb_checkpoints/
+# sweep scratch: logs, shard files (merged into results/sweep.csv), quick smoke test
+results/*.log
+results/*.shard*.csv
+results/quick*
+notebooks/*.png
+notebooks/*.csv
+notebooks/*.json
