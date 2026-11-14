@@ -17,22 +17,21 @@ from rollscale import (  # noqa: E402
     plot_force_vs_rollout,
     plot_heatmap,
     plot_scaling,
-    power_law_slope,
+    plot_slopes,
     read_results,
+    scaling_slopes,
 )
-from rollscale.plotting import aggregate  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def slope_table(rows, metric):
+    sl = scaling_slopes(rows, metric)
     lines = [f"Power-law slopes of median {metric} (log-log least squares)", ""]
     lines.append("vs. training trajectories, per width:")
-    for w, (xs, med, _, _) in aggregate(rows, "n_traj", "width", metric).items():
-        lines.append(f"  width {w:>4g}: slope {power_law_slope(xs, med):+.2f}")
+    lines += [f"  width {w:>4g}: slope {v:+.2f}" for w, v in sl["vs_data"].items()]
     lines.append("vs. width, per number of trajectories:")
-    for n, (xs, med, _, _) in aggregate(rows, "width", "n_traj", metric).items():
-        lines.append(f"  {n:>3g} traj: slope {power_law_slope(xs, med):+.2f}")
+    lines += [f"  {n:>3g} traj: slope {v:+.2f}" for n, v in sl["vs_width"].items()]
     return "\n".join(lines)
 
 
@@ -46,7 +45,11 @@ def main():
     if not rows:
         raise SystemExit(f"no results in {a.csv}; run scripts/run_sweep.py first")
     suffix = "" if a.metric == "rollout_t1" else f"_{a.metric}"
-    for fn, name in [(plot_scaling, "rollout_scaling"), (plot_heatmap, "rollout_heatmap")]:
+    for fn, name in [
+        (plot_scaling, "rollout_scaling"),
+        (plot_heatmap, "rollout_heatmap"),
+        (plot_slopes, "rollout_slopes"),
+    ]:
         print("saved", fn(rows, a.out / f"{name}{suffix}.png", metric=a.metric))
     print("saved", plot_force_vs_rollout(rows, a.out / f"force_vs_rollout{suffix}.png", metric=a.metric))
     table = slope_table(rows, a.metric)

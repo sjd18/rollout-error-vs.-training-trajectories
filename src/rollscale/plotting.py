@@ -20,6 +20,8 @@ __all__ = [
     "plot_scaling",
     "plot_heatmap",
     "plot_force_vs_rollout",
+    "plot_slopes",
+    "scaling_slopes",
     "METRIC_LABELS",
 ]
 
@@ -96,6 +98,27 @@ def pick_families(values, k: int = 5) -> list:
     return [values[i] for i in idx]
 
 
+def scaling_slopes(rows, metric: str = "rollout_t1") -> dict:
+    """Log-log slopes of the median error, the numbers ``plot_results.py`` prints.
+
+    Returns ``{"vs_data": {width: slope}, "vs_width": {n_traj: slope}}``.
+    """
+    return {
+        "vs_data": {
+            w: power_law_slope(xs, med)
+            for w, (xs, med, _, _) in aggregate(rows, "n_traj", "width", metric).items()
+        },
+        "vs_width": {
+            n: power_law_slope(xs, med)
+            for n, (xs, med, _, _) in aggregate(rows, "width", "n_traj", metric).items()
+        },
+    }
+
+
+def _fmt_slopes(d: dict) -> str:
+    return "   ".join(f"{k:g}: {v:+.2f}" for k, v in d.items())
+
+
 def _x_ticks_at(ax, values):
     """Label the log x-axis at exactly the grid values."""
     from matplotlib.ticker import NullLocator
@@ -105,11 +128,11 @@ def _x_ticks_at(ax, values):
     ax.xaxis.set_minor_locator(NullLocator())
 
 
-def _panel(ax, agg, families, colors, family_label, x_label, x_values):
+def _panel(ax, agg, families, colors, slopes, x_label, x_values):
     for g, c in zip(families, colors, strict=False):
         xs, med, lo, hi = agg[g]
         ax.fill_between(xs, lo, hi, color=c, alpha=0.18, lw=0)
-        ax.plot(xs, med, "o-", color=c, ms=6, mec=_SURFACE, mew=1.5, label=f"{g:g}")
+        ax.plot(xs, med, "o-", color=c, ms=6, mec=_SURFACE, mew=1.5, label=f"{g:<4g} slope {slopes[g]:+.2f}")
     ax.set_xscale("log")
     ax.set_yscale("log")
     _x_ticks_at(ax, x_values)
@@ -128,11 +151,18 @@ def plot_scaling(rows, path, metric: str = "rollout_t1", families_width=None, fa
     trajs = sorted({r["n_traj"] for r in rows})
     fw = families_width or pick_families(widths)
     ft = families_traj or pick_families(trajs)
+    sl = scaling_slopes(rows, metric)
 
     with plt.rc_context(_RC):
-        fig, (a, b) = plt.subplots(1, 2, figsize=(12, 4.6), sharey=True)
+        fig, (a, b) = plt.subplots(1, 2, figsize=(12.5, 5.2), sharey=True)
         _panel(
-            a, aggregate(rows, "n_traj", "width", metric), fw, BLUES, "width", "training trajectories", trajs
+            a,
+            aggregate(rows, "n_traj", "width", metric),
+            fw,
+            BLUES,
+            sl["vs_data"],
+            "training trajectories",
+            trajs,
         )
         a.set_ylabel(METRIC_LABELS.get(metric, metric))
         a.set_title("Rollout error vs. training data")
@@ -141,7 +171,7 @@ def plot_scaling(rows, path, metric: str = "rollout_t1", families_width=None, fa
         )
 
         _panel(
-            b, aggregate(rows, "width", "n_traj", metric), ft, ORANGES, "trajectories", "MLP width", widths
+            b, aggregate(rows, "width", "n_traj", metric), ft, ORANGES, sl["vs_width"], "MLP width", widths
         )
         b.set_title("Rollout error vs. model width")
         b.legend(
@@ -152,12 +182,27 @@ def plot_scaling(rows, path, metric: str = "rollout_t1", families_width=None, fa
             title_fontsize=9,
         )
         b.tick_params(labelleft=True)
+        for ax, label, d in [
+            (a, "Slope vs. data, every width", sl["vs_data"]),
+            (b, "Slope vs. width, every data size", sl["vs_width"]),
+        ]:
+            ax.text(
+                0.0,
+                -0.24,
+                f"{label}:\n{_fmt_slopes(d)}",
+                transform=ax.transAxes,
+                fontsize=8.5,
+                color=_TEXT,
+                va="top",
+                family="monospace",
+            )
         fig.text(
             0.01,
-            -0.02,
-            "Lines: median over seeds. Bands: min to max across seeds. Log-log axes. "
-            f"Each panel shows {len(fw)} of {len(widths)} widths / {len(ft)} of {len(trajs)} data sizes "
-            "as lines; see the heatmap for the full grid.",
+            -0.04,
+            "Lines: median over seeds. Bands: min to max across seeds. Log-log axes; "
+            "slope = log-log least-squares fit of the median. "
+            f"Lines show {len(fw)} of {len(widths)} widths / {len(ft)} of {len(trajs)} data sizes; "
+            "the slope rows below each panel and the heatmap cover all of them.",
             fontsize=8,
             color=_TEXT_2,
         )
@@ -183,8 +228,9 @@ def plot_heatmap(rows, path, metric: str = "rollout_t1") -> Path:
             if v:
                 grid[i, j] = np.median(v)
     cmap = LinearSegmentedColormap.from_list("blues", ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"])
+    sl = scaling_slopes(rows, metric)
     with plt.rc_context(_RC):
-        fig, ax = plt.subplots(figsize=(7.2, 4.6))
+        fig, ax = plt.subplots(figsize=(8.4, 5.4))
         im = ax.imshow(
             grid, origin="lower", cmap=cmap, norm=LogNorm(np.nanmin(grid), np.nanmax(grid)), aspect="auto"
         )
@@ -193,7 +239,15 @@ def plot_heatmap(rows, path, metric: str = "rollout_t1") -> Path:
         ax.set_yticks(range(len(widths)), [f"{w:g}" for w in widths])
         ax.set_xlabel("training trajectories (log₂ spaced)")
         ax.set_ylabel("MLP width (log₂ spaced)")
-        ax.set_title("Full grid: median rollout error")
+        ax.set_title("Full grid: median rollout error", pad=34)
+        # Margins: slope of each row (vs. data) on the right, each column (vs. width) on top.
+        right, top = len(trajs) - 0.5 + 0.12, len(widths) - 0.5 + 0.12
+        ax.text(right, top, "slope\nvs. data", fontsize=7.5, color=_TEXT_2, va="bottom", ha="left")
+        for i, w in enumerate(widths):
+            ax.text(right, i, f"{sl['vs_data'][w]:+.2f}", fontsize=8.5, color=_TEXT, va="center", ha="left")
+        ax.text(-0.5, top + 0.05, "slope vs. width:", fontsize=7.5, color=_TEXT_2, va="bottom", ha="right")
+        for j, n in enumerate(trajs):
+            ax.text(j, top, f"{sl['vs_width'][n]:+.2f}", fontsize=8.5, color=_TEXT, va="bottom", ha="center")
         mid = np.sqrt(np.nanmin(grid) * np.nanmax(grid))
         for i in range(len(widths)):
             for j in range(len(trajs)):
@@ -207,7 +261,7 @@ def plot_heatmap(rows, path, metric: str = "rollout_t1") -> Path:
                         fontsize=7.5,
                         color="white" if grid[i, j] > mid else _TEXT,
                     )
-        cb = fig.colorbar(im, ax=ax)
+        cb = fig.colorbar(im, ax=ax, pad=0.13)
         cb.set_label(METRIC_LABELS.get(metric, metric))
         cb.outline.set_visible(False)
         fig.tight_layout()
@@ -245,6 +299,76 @@ def plot_force_vs_rollout(rows, path, metric: str = "rollout_t1") -> Path:
         ax.legend(loc="upper left")
         fig.tight_layout()
         path = Path(path)
+        fig.savefig(path)
+        plt.close(fig)
+    return path
+
+
+def plot_slopes(rows, path, metric: str = "rollout_t1") -> Path:
+    """The fitted log-log slopes themselves: vs. data (per width) and vs. width (per data size)."""
+    import matplotlib.pyplot as plt
+
+    sl = scaling_slopes(rows, metric)
+    with plt.rc_context(_RC):
+        fig, (a, b) = plt.subplots(1, 2, figsize=(12, 4.2), sharey=True)
+        for ax, d, color, ref, ref_label, xlabel, title in [
+            (
+                a,
+                sl["vs_data"],
+                BLUES[2],
+                0.0,
+                "0: data has no effect",
+                "MLP width",
+                "Slope of error vs. training trajectories",
+            ),
+            (
+                b,
+                sl["vs_width"],
+                ORANGES[2],
+                -1.0,
+                "−1: error ∝ 1 / width",
+                "training trajectories",
+                "Slope of error vs. MLP width",
+            ),
+        ]:
+            xs = list(d)
+            ys = [d[k] for k in xs]
+            ax.axhline(ref, color=_TEXT_2, ls="--", lw=1.2, label=ref_label)
+            if ref != 0:
+                ax.axhline(0.0, color=_GRID, lw=1.0)
+            ax.plot(xs, ys, "o", color=color, ms=10, mec=_SURFACE, mew=2, zorder=3)
+            for x, y in zip(xs, ys, strict=True):
+                # Label on the side of the dot away from the reference line.
+                up = y >= ref
+                ax.annotate(
+                    f"{y:+.2f}",
+                    (x, y),
+                    xytext=(0, 11 if up else -11),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom" if up else "top",
+                    fontsize=9,
+                    color=_TEXT,
+                )
+            ax.legend(loc="lower left" if ref == 0 else "upper left", fontsize=9)
+            ax.set_xscale("log")
+            _x_ticks_at(ax, xs)
+            ax.set_xlabel(xlabel)
+            ax.set_title(title)
+        a.set_ylabel("log-log slope of median rollout error")
+        b.tick_params(labelleft=True)
+        a.set_ylim(-1.35, 0.35)
+        fig.text(
+            0.01,
+            -0.03,
+            f"Metric: {METRIC_LABELS.get(metric, metric)}. Each slope is a least-squares fit "
+            "of log(median over seeds) against log(x). These are the numbers scripts/plot_results.py prints.",
+            fontsize=8,
+            color=_TEXT_2,
+        )
+        fig.tight_layout()
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(path)
         plt.close(fig)
     return path

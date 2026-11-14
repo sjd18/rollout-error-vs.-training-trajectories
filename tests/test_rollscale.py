@@ -132,3 +132,22 @@ def test_model_forces_plug_into_metric(starts):
     m = PairPotentialMLP(width=4, depth=1, key=jax.random.PRNGKey(0))
     err = rs.rollout_error(m.forces, starts, horizons=(0.5,))
     assert err[0.5] > 0
+
+
+def test_scaling_slopes_match_printed_table_and_plot(tmp_path):
+    import importlib.util
+    from pathlib import Path
+
+    rows = fake_rows()
+    sl = rs.scaling_slopes(rows)
+    assert sl["vs_data"][4] == pytest.approx(-0.5)
+    assert sl["vs_width"][1] == pytest.approx(-1.0)
+    spec = importlib.util.spec_from_file_location(
+        "plot_results", Path(__file__).resolve().parent.parent / "scripts" / "plot_results.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    table = mod.slope_table(rows, "rollout_t1")
+    assert "width    4: slope -0.50" in table and "  1 traj: slope -1.00" in table
+    out = rs.plot_slopes(rows, tmp_path / "slopes.png")
+    assert out.exists() and out.stat().st_size > 1000

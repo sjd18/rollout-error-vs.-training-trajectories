@@ -14,6 +14,8 @@ The model, data generator and integrator come from [**Equinox-MLP**](https://git
 
 <p align="center"><img src="assets/rollout_scaling.png" width="100%" alt="Two log-log panels: rollout error is flat against the number of training trajectories, and falls steeply with model width"></p>
 
+Each legend entry shows that line's fitted log-log slope, and the rows under each panel list the slope for **every** width and data size.
+
 ## Findings
 
 | | Result |
@@ -47,11 +49,29 @@ recorded at t = 0.5, 1 and 2.5 (100, 200 and 500 steps of dt = 0.005). The headl
 
 ## More results
 
+### The slopes
+
+<p align="center"><img src="assets/rollout_slopes.png" width="100%" alt="Dot plots of the fitted log-log slopes: about zero against training trajectories for every width, and about minus one against width for every data size"></p>
+
+These are exactly the numbers `python scripts/plot_results.py` prints (also saved in [`assets/slopes.txt`](assets/slopes.txt)):
+
+| Slope vs. training trajectories | | Slope vs. MLP width | |
+|---|---|---|---|
+| width 4 | +0.03 | 1 trajectory | −0.93 |
+| width 8 | +0.03 | 2 trajectories | −1.06 |
+| width 16 | −0.03 | 4 trajectories | −1.14 |
+| width 32 | −0.05 | 8 trajectories | −1.11 |
+| width 64 | −0.04 | 16 trajectories | −1.11 |
+| width 128 | −0.02 | 32 trajectories | −1.07 |
+| | | 64 trajectories | −1.06 |
+
+A slope near 0 means more of that quantity doesn't change the error; −1 means doubling it halves the error.
+
 ### The full grid
 
 <p align="center"><img src="assets/rollout_heatmap.png" width="70%" alt="Heatmap of median rollout error over all 42 combinations of training trajectories and width"></p>
 
-Every column looks alike (data barely matters); the rows change sharply (width matters a lot).
+Every column looks alike (data barely matters); the rows change sharply (width matters a lot). The margins give each row's slope vs. data (right) and each column's slope vs. width (top).
 
 ### Rollout error tracks force error
 
@@ -80,7 +100,7 @@ pip install -e ".[dev]"
 **Explore the existing results** (no training needed):
 
 ```bash
-python scripts/plot_results.py        # figures -> assets/, slopes -> terminal and assets/slopes.txt
+python scripts/plot_results.py        # 4 figures -> assets/, slopes -> terminal and assets/slopes.txt
 ```
 
 or open the notebook [`notebooks/explore_results.ipynb`](notebooks/explore_results.ipynb) (`pip install -e ".[notebook]"`). It has the plots, slope table and other horizons, plus a cell that runs a 4-model mini sweep in under a minute.
@@ -132,7 +152,7 @@ src/rollscale/
   plotting.py    log-log scaling panels, heatmap, force-vs-rollout scatter
 scripts/         run_sweep.py, merge_results.py, plot_results.py
 results/         sweep.csv (126 runs) and the exact sweep config
-assets/          figures and slopes.txt
+assets/          figures (scaling, slopes, heatmap, force vs rollout) and slopes.txt
 notebooks/       explore_results.ipynb
 tests/           pytest suite
 ```
@@ -140,14 +160,14 @@ tests/           pytest suite
 ## Testing
 
 ```bash
-pytest -q        # 13 tests, ~20 s on CPU
+pytest -q        # 14 tests, ~20 s on CPU
 ```
 
 The tests cover:
 - the rollout metric: exactly zero for true forces, proportional to small force errors, growing with horizon, and `inf` for runs that blow up;
 - evenly spread, nested training subsets;
 - the sweep's CSV output, resuming, and shard ownership after restarts;
-- power-law slope fitting;
+- power-law slope fitting, and that the figures show the same slopes the script prints;
 - that every figure renders.
 
 ## References
